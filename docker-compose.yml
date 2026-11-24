@@ -1,0 +1,71 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: sisacre_db
+    restart: always
+    environment:
+      POSTGRES_USER: sisacre_user
+      POSTGRES_PASSWORD: sisacre_pass
+      POSTGRES_DB: sisacre_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/src/config/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./backend/src/config/migrate-docentes.sql:/docker-entrypoint-initdb.d/02-migrate-docentes.sql
+      - ./backend/src/config/migrate-egresados.sql:/docker-entrypoint-initdb.d/03-migrate-egresados.sql
+    networks:
+      - sisacre_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sisacre_user -d sisacre_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sisacre_backend
+    restart: always
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: sisacre_db
+      DB_USER: sisacre_user
+      DB_PASSWORD: sisacre_pass
+      JWT_SECRET: sisacre_jwt_secret_2024
+      JWT_EXPIRES_IN: 8h
+      MAX_FILE_SIZE: 52428800
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/src:/app/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sisacre_net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sisacre_frontend
+    restart: always
+    ports:
+      - "4200:80"
+    depends_on:
+      - backend
+    networks:
+      - sisacre_net
+
+volumes:
+  postgres_data:
+
+networks:
+  sisacre_net:
+    driver: bridge
